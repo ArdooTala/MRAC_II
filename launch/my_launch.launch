@@ -1,0 +1,22 @@
+<launch>
+  <!-- KINECT V1 node -->
+  <include file="$(find openni_launch)/launch/openni.launch">
+  </include>
+
+  <!-- Open RVIZ -->
+  <!-- Settings to be set -->
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find my_pcl_tutorial)/rviz/MRAC_II_rviz.rviz" />
+
+  <!-- Make a fake Static Robot to Origin Transform -->
+  <!-- To be converted to input -->
+  <node name="FAKE_ROBOT_TF" pkg="tf" type="static_transform_publisher" args="-2.5 0 -0.5 0 0 0 1 parker robot 10"/>
+
+  <!-- Run the PCL node -->
+  <node name="cloud_manipulation" pkg="my_pcl_tutorial" type="example" args="input:=/camera/depth_registered/points" />
+
+  <!-- Run the ARUCO node -->
+  <node name="localizer_marker" pkg="my_pcl_tutorial" type="AR_Reader.py" />
+  <node name="localizer_tf" pkg="my_pcl_tutorial" type="tf_publisher.py" />
+  <node name="localizer_img" pkg="my_pcl_tutorial" type="hough_circles.py" />
+
+</launch>
