@@ -6,6 +6,7 @@ import cv2, PIL, os
 from cv2 import aruco
 import pickle
 import pandas as pd
+import math
 
 import rospy
 from cv_bridge import CvBridge, CvBridgeError
@@ -13,43 +14,46 @@ from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseStamped
 from tf import transformations
 
+from AR2Transform import Detector
+from Transforms import Transformations
 
-def to_pose_stamped(tvec, rvec):
-    x, y, z = tvec
+
+def to_pose_stamped(t_matrix):
 
     pose = PoseStamped()
     pose.header.stamp = rospy.Time.now()
     pose.header.frame_id = ""
-    pose.pose.position.x = x
-    pose.pose.position.y = y
-    pose.pose.position.z = z
+    pose.pose.position.x = t_matrix[0, 3]
+    pose.pose.position.y = t_matrix[1, 3]
+    pose.pose.position.z = t_matrix[2, 3]
 
-    M1 = cv2.Rodrigues(rvec)[0]
-    rospy.loginfo(cv2.Rodrigues(rvec)[0])
-    # quaternion = transformations.quaternion_from_matrix(cv2.Rodrigues(rvec)[0])
-    # quaternion = transformations.quaternion_from_euler(*rvec)
-    r = np.math.sqrt(float(1) + M1[0, 0] + M1[1, 1] + M1[2, 2]) * 0.5
-    i = (M1[2, 1] - M1[1, 2]) / (4 * r)
-    j = (M1[0, 2] - M1[2, 0]) / (4 * r)
-    k = (M1[1, 0] - M1[0, 1]) / (4 * r)
+    quaternion = transformations.quaternion_from_matrix(t_matrix)
+    d = math.sqrt(quaternion[0]**2+quaternion[1]**2+quaternion[2]**2+quaternion[3]**2)
 
-    pose.pose.orientation.x = i
-    pose.pose.orientation.y = j
-    pose.pose.orientation.z = k
-    pose.pose.orientation.w = r
+    pose.pose.orientation.x = quaternion[0]/d
+    pose.pose.orientation.y = quaternion[1]/d
+    pose.pose.orientation.z = quaternion[2]/d
+    pose.pose.orientation.w = quaternion[3]/d
 
     return pose
 
 
+
 def find_ar(msg):
-    global parameters
-    global criteria
-    global size_of_marker
-    global length_of_axis
-    global bridge
-    global aruco_dict
+    global detector, tr
 
     frame = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+    imaxis, translations = detector.find_ar(frame)
+    if translations:
+        if len(translations) == 3:
+            trans = [o[1] for o in sorted(translations.items(), key=lambda x:x[0])]
+
+            transformations_matrix = tr.calculate_transformation(*trans)
+
+            crd_pub.publish(to_pose_stamped(transformations_matrix))
+            img_pub.publish(bridge.cv2_to_imgmsg(imaxis, "bgr8"))
+
+    """
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
@@ -68,15 +72,25 @@ def find_ar(msg):
         print "\n", "_"*4, "TRANSFORM", "_"*40, "\n"
         print "T: ", tvecs
         print "R: ", rvecs
-        crd_pub.publish(to_pose_stamped(tvecs[0][0], rvecs[0][0]))
-    img_pub.publish(bridge.cv2_to_imgmsg(frame, "bgr8"))
-    # cv2.imshow("KUN", frame)
+        # cv2.imshow("KUN", frame)
     # cv2.waitKey(1)
-
+"""
 
 if __name__ == "__main__":
-    with open("/home/ardoo/catkin_ws/src/my_pcl_tutorial/src/Calibration_Parameters.pickle", 'rb') as pkl:
-        ret, mtx, dist = pickle.load(pkl)
+    detector = Detector(0.08,
+                        "/home/ardoo/catkin_ws/src/my_pcl_tutorial/src/Calibration_Parameters.pickle",
+                        [0, 8, 9])
+    tr = Transformations([2500, 1000, 600], [2500, -1000, 600], [2900, 1000, 600])
+    bridge = CvBridge()
+
+    img_pub = rospy.Publisher('/marker/img', Image, queue_size=1)
+    crd_pub = rospy.Publisher('/marker/pose', PoseStamped, queue_size=1)
+    rospy.init_node('localizer_marker', anonymous=True)
+
+    rospy.Subscriber("/camera/rgb/image_color", Image, find_ar)
+
+    rospy.spin()
+    """
 
     print "Calibration Parameters Loaded . . ."
     print "\nMTX:\n", mtx
@@ -88,12 +102,10 @@ if __name__ == "__main__":
     size_of_marker = 0.114  # side lenght of the marker in meter
     length_of_axis = 0.5
 
-    bridge = CvBridge()
+    
 
-    img_pub = rospy.Publisher('/marker/img', Image, queue_size=1)
-    crd_pub = rospy.Publisher('/marker/pose', PoseStamped, queue_size = 1)
-    rospy.init_node('localizer_marker', anonymous=True)
     rospy.Subscriber("/camera/rgb/image_color", Image, find_ar)
     rate = rospy.Rate(10)  # 10hz
 
-    rospy.spin()
+    
+"""
