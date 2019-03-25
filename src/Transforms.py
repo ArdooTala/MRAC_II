@@ -8,14 +8,14 @@ class Transformations:
         self.marker_1 = np.array(marker_1)
         self.marker_2 = np.array(marker_2)
 
-        t0 = time.time()
+        # t0 = time.time()
         self.markers_in_robot = self.frame_from_points(self.marker_0, self.marker_1, self.marker_2)
-        self.robot2marker_transform = self.transform_from_plane(self.markers_in_robot)
+        self.robot2marker_transform = np.linalg.inv(self.transform_from_plane(self.markers_in_robot))
 
     def frame_from_points(self, pt_0, pt_1, pt_2):
-        u = pt_2 - pt_0
+        u = pt_1 - pt_0
         x_vec = u / np.sqrt(np.sum(u ** 2))
-        v = pt_1 - pt_0
+        v = pt_2 - pt_0
         z_vec = np.cross(x_vec, v)
         z_vec = z_vec / np.sqrt(np.sum(z_vec ** 2))
         y_vec = np.cross(z_vec, x_vec)
@@ -37,4 +37,4 @@ class Transformations:
         return kinect2marker_transform
 
 
-tr = Transformations([2500, 1000, 600], [2500, -1000, 600], [2900, 1000, 600])
+# tr = Transformations([330, 330, 20], [730, -370, 20], [700, 300, 20])

@@ -4,8 +4,6 @@
 import numpy as np
 import cv2, PIL, os
 from cv2 import aruco
-import pickle
-import pandas as pd
 import math
 
 import rospy
@@ -50,62 +48,25 @@ def find_ar(msg):
 
             transformations_matrix = tr.calculate_transformation(*trans)
 
-            crd_pub.publish(to_pose_stamped(transformations_matrix))
-            img_pub.publish(bridge.cv2_to_imgmsg(imaxis, "bgr8"))
+            crd1_pub.publish(to_pose_stamped(transformations_matrix))
+            crd2_pub.publish(to_pose_stamped(tr.robot2marker_transform))
 
-    """
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    img_pub.publish(bridge.cv2_to_imgmsg(imaxis, "bgr8"))
 
-    corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-    if corners:
-        # SUB PIXEL DETECTION
-        for corner in corners:
-            cv2.cornerSubPix(gray, corner, winSize=(3, 3), zeroZone=(-1, -1), criteria=criteria)
-
-        rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners, size_of_marker, mtx, dist)
-        print _
-        frame = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
-
-        for i in range(len(tvecs)):
-            gray = aruco.drawAxis(frame, mtx, dist, rvecs[i], tvecs[i], length_of_axis)
-
-        print "\n", "_"*4, "TRANSFORM", "_"*40, "\n"
-        print "T: ", tvecs
-        print "R: ", rvecs
-        # cv2.imshow("KUN", frame)
-    # cv2.waitKey(1)
-"""
 
 if __name__ == "__main__":
-    detector = Detector(0.08,
+    detector = Detector(0.055,
                         "/home/ardoo/catkin_ws/src/my_pcl_tutorial/src/Calibration_Parameters.pickle",
-                        [0, 8, 9])
-    tr = Transformations([2500, 1000, 600], [2500, -1000, 600], [2900, 1000, 600])
+                        [0, 3, 4])
+    tr = Transformations([0.328, 0.347, 0.017], [.458, -0.309, 0.016], [0.491, 0.353, .016])
     bridge = CvBridge()
 
     img_pub = rospy.Publisher('/marker/img', Image, queue_size=1)
-    crd_pub = rospy.Publisher('/marker/pose', PoseStamped, queue_size=1)
+    crd1_pub = rospy.Publisher('/marker/pose', PoseStamped, queue_size=1)
+    crd2_pub = rospy.Publisher('/robot/pose', PoseStamped, queue_size=1)
+
     rospy.init_node('localizer_marker', anonymous=True)
 
     rospy.Subscriber("/camera/rgb/image_color", Image, find_ar)
 
     rospy.spin()
-    """
-
-    print "Calibration Parameters Loaded . . ."
-    print "\nMTX:\n", mtx
-    print "\nDIST:\n", dist
-
-    aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
-    parameters = aruco.DetectorParameters_create()
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.0001)
-    size_of_marker = 0.114  # side lenght of the marker in meter
-    length_of_axis = 0.5
-
-    
-
-    rospy.Subscriber("/camera/rgb/image_color", Image, find_ar)
-    rate = rospy.Rate(10)  # 10hz
-
-    
-"""

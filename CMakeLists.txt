@@ -8,12 +8,20 @@ project(my_pcl_tutorial)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  pcl_conversions
-  pcl_ros
-  roscpp
-  sensor_msgs
-)
+        geometry_msgs
+#        std_msgs
+        sensor_msgs
+        message_generation
+        pcl_conversions
+        pcl_ros
+        roscpp
+        rospy
+        sensor_msgs
+        tf_conversions
+        eigen_conversions)
 
+# set(Eigen_INCLUDE_DIRS "/usr/include/eigen3/Eigen")
+# find_package(Eigen 3.3 REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -56,11 +64,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+ add_service_files(
+   FILES
+   lookup_transform.srv
+ )
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -70,10 +77,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   sensor_msgs
-# )
+ generate_messages(
+   DEPENDENCIES
+         geometry_msgs
+         std_msgs
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -107,8 +115,9 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES my_pcl_tutorial
-#  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs
+  CATKIN_DEPENDS sensor_msgs geometry_msgs message_runtime
 #  DEPENDS system_lib
+#        DEPENDS Eigen
 )
 
 ###########
@@ -120,6 +129,7 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+        ${Eigen_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library

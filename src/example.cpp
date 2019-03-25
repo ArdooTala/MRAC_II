@@ -1,181 +1,246 @@
-#include <sstream>
-#include <iostream>
-#include <vector>
-
-#include <Eigen/Core>
-#include <boost/thread/thread.hpp>
-
 #include <ros/ros.h>
-
+#include <ros/console.h>
+// PCL specific includes
 #include <sensor_msgs/PointCloud2.h>
+#include <geometry_msgs/Transform.h>
+
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
+
+//#include <iostream>
+#include <vector>
 #include <pcl/search/search.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/segmentation/region_growing_rgb.h>
+#include <sstream>
+
+#include <iostream>
 #include <pcl/io/pcd_io.h>
-#include <pcl/registration/ndt.h>
+
+#include <boost/thread/thread.hpp>
+
 #include <pcl/filters/extract_indices.h>
-#include <pcl/common/time.h>
-#include <pcl/console/print.h>
-#include <pcl/features/normal_3d_omp.h>
-#include <pcl/features/fpfh_omp.h>
-#include <pcl/filters/filter.h>
-#include <pcl/registration/icp.h>
-#include <pcl/registration/sample_consensus_prerejective.h>
-#include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/features/normal_3d.h>
+#include <pcl/common/transforms.h>
+
+#include <pcl/filters/conditional_removal.h>
+#include <pcl/filters/radius_outlier_removal.h>
+
+//#include <tf/transform_listener.h>
+//#include <tf/transform_datatypes.h>
+//#include <tf_conversions/tf_eigen.h>
+//#include <eigen_conversions/eigen_msg.h>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include "my_pcl_tutorial/lookup_transform.h"
 
 
 
 ros::Publisher pub;
 
-void
-cloud_cb(const sensor_msgs::PointCloud2ConstPtr &cloud_msg) {
-    const float leaf = 0.01f;
+
+void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
+{
+//    tf::TransformListener listener;
 
     // Container for original & filtered data
-    pcl::PCLPointCloud2 *cloud = new pcl::PCLPointCloud2;
+    pcl::PCLPointCloud2* cloud = new pcl::PCLPointCloud2;
     pcl::PCLPointCloud2ConstPtr cloudPtr(cloud);
     pcl::PCLPointCloud2 cloud_filtered;
 
     // Convert to PCL data type
     pcl_conversions::toPCL(*cloud_msg, *cloud);
 
-    // Perform the actual filtering
-    pcl::VoxelGrid <pcl::PCLPointCloud2> sor;
-    sor.setInputCloud(cloudPtr);
-    sor.setLeafSize(leaf, leaf, leaf);
-    sor.filter(cloud_filtered);
+    // Perform the DOWNSAMPLING
+    pcl::VoxelGrid<pcl::PCLPointCloud2> stefano;
+    stefano.setInputCloud (cloudPtr);
+    stefano.setLeafSize (0.01, 0.01, 0.01);
+    stefano.filter (cloud_filtered);
 
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud1(new pcl::PointCloud <pcl::PointXYZRGB>);
-    pcl::fromPCLPointCloud2(cloud_filtered, *cloud1);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered2 (new pcl::PointCloud <pcl::PointXYZRGB>);
+    pcl::fromPCLPointCloud2(cloud_filtered, *cloud_filtered2);
 
-    pcl::search::Search<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree <pcl::PointXYZRGB>);
-//    pcl::IndicesPtr indices (new std::vector <int>);
 
-    pcl::RegionGrowingRGB <pcl::PointXYZRGB> reg;
-    reg.setInputCloud(cloud1);
-    // reg.setIndices (indices);
-    reg.setSearchMethod(tree);
-    reg.setDistanceThreshold(10);
-    reg.setPointColorThreshold(5);
-    reg.setRegionColorThreshold(4);
-    reg.setMinClusterSize(200);
 
-    std::vector <pcl::PointIndices> clusters;
-    reg.extract(clusters);
+//    ros::ServiceClient client = nh.serviceClient<my_pcl_tutorial::lookup_transform>("robot2kinect_transform");
+    my_pcl_tutorial::lookup_transform srv;
+//    srv.request;
 
-    std::cout << clusters.size() << std::endl;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZRGB> ());
+    if (ros::service::call("robot2kinect_transform", srv))
+    {
+//        geometry_msgs::Transform kos = srv.response;
 
-//    // Create the filtering object
-//    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
-//    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud (new pcl::PointCloud <pcl::PointXYZRGB>);
+        Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
+
+        transform_2.translation() << srv.response.Transformation.translation.x,
+            srv.response.Transformation.translation.y, srv.response.Transformation.translation.z;
+
+        transform_2.rotate (Eigen::Quaternionf (srv.response.Transformation.rotation.w,
+                                                srv.response.Transformation.rotation.x,
+                                                srv.response.Transformation.rotation.y,
+                                                srv.response.Transformation.rotation.z));
+
+//        ROS_INFO("Transform Recieved . . .");
+        pcl::transformPointCloud (*cloud_filtered2, *transformed_cloud, transform_2);
+
+    }
+    else
+    {
+        ROS_ERROR("Failed to call service add_two_ints");
+        transformed_cloud = cloud_filtered2;
+    }
+
+    size_t num_kirs = transformed_cloud->size();
+//    ROS_WARN("KIIIIIIIIIIIR %d", (int)num_kirs);
+
+//    tf::StampedTransform _transform;
+//    tf::TransformListener listener;
+//    listener.waitForTransform("/camera_rgb_optical_frame", "/ABB", ros::Time::now(), ros::Duration(2) );
 //
+//    try{
+//        listener.lookupTransform("/camera_rgb_optical_frame", "/ABB", ros::Time::now(), _transform);
+//    }
+//    catch (tf::TransformException &ex) {
+//        ROS_ERROR("%s",ex.what());
+//    }
 //
-//    pcl::PointIndices inds = clusters[0];
+//    Eigen::Affine3d kir;
+//    tf::transformTFToEigen(_transform, kir);
 //
-//    // Extract the inliers
-//    extract.setInputCloud (cloud1);
-//    extract.setIndices (boost::make_shared<const pcl::PointIndices> (inds));
-//    extract.setNegative (false);
-//    extract.filter (*colored_cloud);
 
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud();
 
-    pcl::PCLPointCloud2 clean_cloud;
-    pcl::toPCLPointCloud2(*colored_cloud, clean_cloud);
 
+    // build the condition
+    pcl::ConditionAnd<pcl::PointXYZRGB>::Ptr range_cond (new pcl::ConditionAnd<pcl::PointXYZRGB> ());
+
+    range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::GT, 0)));
+    range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("x", pcl::ComparisonOps::LT, 850)));
+
+    range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("y", pcl::ComparisonOps::GT, -0.160)));
+    range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("y", pcl::ComparisonOps::LT,  0.160)));
+
+    range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::GT, 0.0)));
+    range_cond->addComparison (pcl::FieldComparison<pcl::PointXYZRGB>::ConstPtr (new pcl::FieldComparison<pcl::PointXYZRGB> ("z", pcl::ComparisonOps::LT, 0.100)));
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud1 (new pcl::PointCloud <pcl::PointXYZRGB>);
+
+    // build the filter
+    pcl::ConditionalRemoval<pcl::PointXYZRGB> condrem;
+    condrem.setCondition (range_cond);
+//    condrem.setInputCloud (cloud_filtered2);
+    condrem.setInputCloud (transformed_cloud);
+    condrem.setKeepOrganized(false);
+    // apply filter
+    condrem.filter (*cloud1);
+
+    size_t num_points = cloud1->size();
+    ROS_WARN("KIIIIIIIIIIIR %d", (int)num_points);
+
+
+ //   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud1 (new pcl::PointCloud <pcl::PointXYZRGB>);
+ //   pcl::fromPCLPointCloud2(cloud_filtered3, *cloud1);
 
 /*
-//pose estimation of rigid objects
 
-    // Create the normal estimation class
-    pcl::NormalEstimation <pcl::PointXYZ, pcl::PointNormal> ne;
-    pcl::search::KdTree<pcl::PointXYZ>::Ptr ntree (new pcl::search::KdTree<pcl::PointXYZ>());
-    ne.setSearchMethod(ntree);
-    ne.setRadiusSearch(0.03);
+    pcl::search::Search<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB>);
 
-    // SCENE NORMALS
-    pcl::PointCloud<pcl::PointXYZ>::Ptr scene(new pcl::PointCloud <pcl::PointXYZ>);
-    pcl::fromPCLPointCloud2(clean_cloud, *scene);
-    ne.setInputCloud(scene);
-    pcl::PointCloud<pcl::PointNormal>::Ptr scene_normals (new pcl::PointCloud<pcl::PointNormal>);
-    ne.compute(*scene_normals);
+    pcl::IndicesPtr indices (new std::vector <int>);
 
-    // OBJECT NORMALS
-    pcl::PointCloud<pcl::PointXYZ>::Ptr object (new pcl::PointCloud <pcl::PointXYZ>);
-    pcl::io::loadPCDFile<pcl::PointXYZ>("/home/ardoo/catkin_ws/src/my_pcl_tutorial/Ball_InScale.pcd", *object);
-    pcl::VoxelGrid<pcl::PointXYZ> grid;
-    grid.setLeafSize (leaf, leaf, leaf);
-    grid.setInputCloud (object);
-    grid.filter (*object);
-    ne.setInputCloud(object);
-    pcl::PointCloud<pcl::PointNormal>::Ptr object_normals (new pcl::PointCloud<pcl::PointNormal>);
-    ne.compute(*object_normals);
+    pcl::RegionGrowingRGB<pcl::PointXYZRGB> reg;
+    reg.setInputCloud (cloud1);
+    // reg.setIndices (indices);
+    reg.setSearchMethod (tree);
+    reg.setDistanceThreshold (10);
+    reg.setPointColorThreshold (15);
+    reg.setRegionColorThreshold (8);
+    reg.setMinClusterSize (150);
 
-    // FEATURE CLOUDS
-    pcl::PointCloud<pcl::FPFHSignature33>::Ptr object_features (new pcl::PointCloud <pcl::FPFHSignature33>);
-    pcl::PointCloud<pcl::FPFHSignature33>::Ptr scene_features (new pcl::PointCloud <pcl::FPFHSignature33>);
+    std::vector<pcl::PointIndices> clusters;
+    reg.extract (clusters);
 
-    // ALIGNED OBJECT
-    pcl::PointCloud<pcl::PointNormal>::Ptr object_aligned (new pcl::PointCloud <pcl::PointNormal>);
+//    std::cout << clusters.size() << std::endl;
 
-    // Estimate features
-    pcl::FPFHEstimationOMP <pcl::PointXYZ, pcl::PointNormal, pcl::FPFHSignature33> fest;
-    fest.setRadiusSearch(0.06);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr color_cloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    colored_cloud = reg.getColoredCloud ();
+//    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud2 (new pcl::PointCloud <pcl::PointXYZRGB>);
 
-    fest.setInputCloud(object);
-    fest.setInputNormals(object_normals);
-    fest.compute(*object_features);
 
-    fest.setInputCloud(scene);
-    fest.setInputNormals(scene_normals);
-    fest.compute(*scene_features);
+   // Create the filtering object
+    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+    extract.setInputCloud (cloud1);
+    extract.setNegative (false); //we want this paper
 
-    // Perform alignment
-    pcl::SampleConsensusPrerejective <pcl::PointNormal, pcl::PointNormal, pcl::FPFHSignature33> align;
-    align.setMaximumIterations(50000); // Number of RANSAC iterations
-    align.setNumberOfSamples(3); // Number of points to sample for generating/prerejecting a pose
-    align.setCorrespondenceRandomness(15); // Number of nearest features to use
-    align.setSimilarityThreshold(0.9f); // Polygonal edge length similarity threshold *****************
-    align.setMaxCorrespondenceDistance(2.5f * leaf); // Inlier threshold
-    align.setInlierFraction(0.05f); // Required inlier fraction for accepting a pose hypothesis
+    int intended_r = 225;
+    int intended_g = 0;
+    int intended_b = 0;
+    int min_error = 800;
 
-    align.setInputSource(object_normals);
-    align.setSourceFeatures(object_features);
-    align.setInputTarget(scene_normals);
-    align.setTargetFeatures(scene_features);
+    for (size_t i = 0; i < clusters.size(); ++i) {
+        pcl::PointIndices paper = clusters[i];
+        extract.setIndices (boost::make_shared<const pcl::PointIndices> (paper));
+        extract.filter (*color_cloud);
+        size_t num_points = color_cloud->size();
 
-    align.align(*object_aligned);
+        int r = 0;
+        int g = 0;
+        int b = 0;
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr aligned (new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::transformPointCloud (*scene, *aligned, align.getFinalTransformation());
+        for (size_t j = 0; j < num_points; ++j) {
+            pcl::PointXYZRGB pt = color_cloud->points[j];
+            r += pt.r;
+            g += pt.g;
+            b += pt.b;
+        }
 
-    pcl::PCLPointCloud2 final_cloud;
-    pcl::toPCLPointCloud2(*aligned, final_cloud);
+        r /= num_points;
+        g /= num_points;
+        b /= num_points;
+
+        int error = abs(intended_r - r) + abs(intended_g - g) + abs(intended_b - b);
+        std::cout << error << ", ";
+        if (error < min_error) {
+            min_error = error;
+            *colored_cloud = *color_cloud;
+        }
+    }
+
+    std::cout << std::endl;
 */
-//====PUBLISH=================================================================================
+
+    pcl::PCLPointCloud2 cleancloud;
+    pcl::toPCLPointCloud2(*cloud1, cleancloud);
+//    pcl::toPCLPointCloud2(*cloud_filtered2, cleancloud);
+
+    // Convert to ROS data type
     sensor_msgs::PointCloud2 output;
-    pcl_conversions::fromPCL(clean_cloud, output);
+    pcl_conversions::fromPCL(cleancloud, output);
 
     std::stringstream ss;
-    ss << "camera_rgb_optical_frame";
+    ss << "/ABB";
     output.header.frame_id = ss.str();
-    pub.publish(output);
-//============================================================================================
+
+    // Publish the data
+    pub.publish (output);
 }
 
-int
-main(int argc, char **argv) {
-    ros::init(argc, argv, "my_pcl");
+int main (int argc, char** argv)
+{
+    // Initialize ROS
+    ros::init (argc, argv, "my_pcl");
     ros::NodeHandle nh;
 
-    ros::Subscriber sub = nh.subscribe("input", 1, cloud_cb);
-    pub = nh.advertise<sensor_msgs::PointCloud2>("output", 1);
+    // Create a ROS subscriber for the input point cloud
+    ros::Subscriber sub = nh.subscribe ("input", 1, cloud_cb); //, listener, _transform
 
-    ros::spin();
+    // Create a ROS publisher for the output point cloud
+    pub = nh.advertise<sensor_msgs::PointCloud2> ("output", 1);
+
+    // Spin
+    ros::spin ();
 }
